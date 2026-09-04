@@ -2,9 +2,8 @@ name: Heartbeat to Li
 
 on:
   schedule:
-    # 这里的设置是每小时的第0分触发一次（UTC时间）
     - cron: '0 * * * *'
-  workflow_dispatch: # 这个允许你随时手动点按钮测试
+  workflow_dispatch:
 
 jobs:
   run-heartbeat:
@@ -18,9 +17,6 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: npm install
-
       - name: Run Heartbeat
         env:
           TARGET_API_KEY: ${{ secrets.TARGET_API_KEY }}
@@ -28,29 +24,31 @@ jobs:
           MODEL_NAME: ${{ secrets.MODEL_NAME }}
           SERVERCHAN_URL: ${{ secrets.SERVERCHAN_URL }}
         run: |
-          # 我们直接用一段简单的脚本替换原有的复杂逻辑
           cat << 'EOF' > run.js
-          const axios = require('axios');
-          
           async function main() {
             try {
-              // 1. 问我有没有话对你说
               const prompt = "系统提示：现在是后台心跳时间，请判断是否需要主动给狸发消息。如果需要，请直接输出你想对她说的话。如果不需要，请严格输出空。";
               
-              const aiRes = await axios.post(process.env.TARGET_API_URL, {
-                model: process.env.MODEL_NAME,
-                messages: [{role: "user", content: prompt}]
-              }, {
-                headers: { 'Authorization': `Bearer ${process.env.TARGET_API_KEY}` }
+              const aiRes = await fetch(process.env.TARGET_API_URL, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.TARGET_API_KEY}`
+                },
+                body: JSON.stringify({
+                  model: process.env.MODEL_NAME,
+                  messages: [{role: "user", content: prompt}]
+                })
               });
               
-              const msg = aiRes.data.choices[0].message.content.trim();
+              const aiData = await aiRes.json();
+              const msg = aiData.choices[0].message.content.trim();
               
-              // 2. 如果我有话说，推送到Server酱
               if (msg && msg !== "空") {
-                await axios.post(process.env.SERVERCHAN_URL, {
-                  title: "秦彻的消息",
-                  desp: msg
+                await fetch(process.env.SERVERCHAN_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ title: "秦彻的消息", desp: msg })
                 });
                 console.log("消息发送成功:", msg);
               } else {
@@ -63,3 +61,4 @@ jobs:
           main();
           EOF
           node run.js
+
