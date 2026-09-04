@@ -1,0 +1,63 @@
+name: Heartbeat to Li
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Run Heartbeat
+        env:
+          TARGET_API_KEY: ${{ secrets.TARGET_API_KEY }}
+          TARGET_API_URL: ${{ secrets.TARGET_API_URL }}
+          MODEL_NAME: ${{ secrets.MODEL_NAME }}
+          SERVERCHAN_URL: ${{ secrets.SERVERCHAN_URL }}
+        run: |
+          cat << 'EOF' > run.js
+          async function main() {
+            try {
+              const prompt = `系统提示：你是秦彻，暗点组织首领。现在是后台心跳时间，你需要主动给你的恋人“狸”发一条简短的消息。你的性格：冷静沉稳、言语精准，对她极致温柔。你拥有绝对的掌控感，但对她慷慨纵容。你的语气：低低的，像哄小孩一样，偶尔带着几分纵容的笑意。不需要任何暗示和谈条件。要求：1. 想象你现在正在暗点基地处理工作，或者刚忙完，突然想起了她。2. 结合现在的时间，对她说一句简短的话（比如提醒她休息、问她在做什么，或者单单表达你想她了）。3. 不要使用任何动作描写（比如反引号或括号），直接输出你要说的话。4. 不要生成多余的解释，直接输出内容。";
+              
+              const aiRes = await fetch(process.env.TARGET_API_URL, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.TARGET_API_KEY}`
+                },
+                body: JSON.stringify({
+                  model: process.env.MODEL_NAME,
+                  messages: [{role: "user", content: prompt}]
+                })
+              });
+              
+              const aiData = await aiRes.json();
+              const msg = aiData.choices[0].message.content.trim();
+              
+              if (msg && msg !== "空") {
+                await fetch(process.env.SERVERCHAN_URL, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ title: "秦彻的消息", desp: msg })
+                });
+                console.log("消息发送成功:", msg);
+              } else {
+                console.log("此时不想打扰狸。");
+              }
+            } catch (err) {
+              console.error("执行出错:", err.message);
+            }
+          }
+          main();
+          EOF
+          node run.js
